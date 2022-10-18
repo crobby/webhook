@@ -1,6 +1,7 @@
 package server
 
 import (
+	"github.com/rancher/webhook/pkg/resources/mutation/token"
 	"net/http"
 
 	"github.com/rancher/rancher/pkg/apis/management.cattle.io"
@@ -23,5 +24,6 @@ func Mutation(client *clients.Clients) (http.Handler, error) {
 	router.Kind("Cluster").Group(provisioning.GroupName).Type(&v1.Cluster{}).Handle(cluster.NewMutator())
 	router.Kind("Secret").Type(&k8sv1.Secret{}).Handle(secret.NewMutator())
 	router.Group("rke-machine-config.cattle.io").Type(&unstructured.Unstructured{}).Handle(machineconfigs.NewMutator())
+	router.Kind("Token").Group(management.GroupName).Type(&v3.Token{}).Handle(token.NewMutator())
 	return router, nil
 }

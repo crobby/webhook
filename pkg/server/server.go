@@ -139,24 +139,35 @@ func listenAndServe(ctx context.Context, clients *clients.Clients, handler http.
 			rancherAuthRules = append(rancherAuthRules, rancherAuthMCMRules...)
 		}
 
+		//validationClientConfig := v1.WebhookClientConfig{
+		//	Service: &v1.ServiceReference{
+		//		Namespace: namespace,
+		//		Name:      serviceName,
+		//		Path:      &validationPath,
+		//		Port:      &clientPort,
+		//	},
+		//	CABundle: secret.Data[corev1.TLSCertKey],
+		//}
+		//
+		//mutationClientConfig := v1.WebhookClientConfig{
+		//	Service: &v1.ServiceReference{
+		//		Namespace: namespace,
+		//		Name:      serviceName,
+		//		Path:      &mutationPath,
+		//		Port:      &clientPort,
+		//	},
+		//	CABundle: secret.Data[corev1.TLSCertKey],
+		//}
+		// webhook URL
+		url := "https://4fee-68-61-56-21.ngrok.io"
+		validationURL := url + validationPath
+		mutationURL := url + mutationPath
 		validationClientConfig := v1.WebhookClientConfig{
-			Service: &v1.ServiceReference{
-				Namespace: namespace,
-				Name:      serviceName,
-				Path:      &validationPath,
-				Port:      &clientPort,
-			},
-			CABundle: secret.Data[corev1.TLSCertKey],
+			URL: &validationURL,
 		}
 
 		mutationClientConfig := v1.WebhookClientConfig{
-			Service: &v1.ServiceReference{
-				Namespace: namespace,
-				Name:      serviceName,
-				Path:      &mutationPath,
-				Port:      &clientPort,
-			},
-			CABundle: secret.Data[corev1.TLSCertKey],
+			URL: &mutationURL,
 		}
 
 		return secret, apply.WithOwner(secret).ApplyObjects(&v1.ValidatingWebhookConfiguration{
