@@ -1,0 +1,85 @@
+#!/bin/bash
+set -e
+
+export KUBECONFIG=
+export CATTLE_DEV_MODE=yes
+export CATTLE_SERVER_URL="https://$(ip route get 8.8.8.8 | awk '{print $7}'):443"
+export CATTLE_BOOTSTRAP_PASSWORD="admin"
+export CATTLE_FEATURES="harvester=false"
+
+# Perfroms a kubectl get for a rancher webhook pod that is not being deleted and is running
+get_running_webhook() {
+    echo $(kubectl get pods -n cattle-system --selector=app=rancher-webhook --template '
+    {{- $name:="" -}}
+    {{range $pod := .items -}}
+        {{if $pod.metadata.deletionTimestamp -}}
+            {{continue -}}
+        {{end -}}
+        {{if eq $pod.status.phase "Running" -}}
+            {{$name = $pod.metadata.name -}}
+            {{break -}}
+        {{end -}}
+    {{end -}} {{$name}}')
+}
+
+echo "Starting Rancher Server"
+entrypoint.sh >./rancher.log 2>&1 &
+
+echo "Waitng for rancher health check..."
+while ! curl -sf http://localhost:80/healthz; do
+    sleep 2
+done
+
+echo "Waiting for rancher install and rollout rancher-webhook..."
+while ! kubectl rollout status -w -n cattle-system deploy/rancher-webhook; do
+    sleep 2
+done
+
+###### Replace the installed webhook binary with the one we compiled
+
+# patch the webhook deployment command so that it waits for a new webhook to be placed in /home/webhook/webhook then runs the new binary
+kubectl patch deployment -n cattle-system rancher-webhook --patch \
+    '{ "spec": { "template": {"spec": { "containers": [
+    {
+        "name": "rancher-webhook",
+        "command": [
+            "/bin/bash"
+        ],
+        "args": [
+            "-c",
+            "while [ ! -f /home/webhook/webhook ]; do sleep 2; done && chmod +x /home/webhook/webhook && /home/webhook/webhook"
+        ],
+        "startupProbe": {
+            "failureThreshold": 10,
+            "httpGet": {
+                "path": "/healthz",
+                "port": "https",
+                "scheme": "HTTPS"
+            },
+            "periodSeconds": 15,
+            "successThreshold": 1,
+            "timeoutSeconds": 1
+        }
+    }]}}}}'
+
+kubectl scale deployment --replicas=0 -n cattle-system rancher-webhook
+kubectl wait --for=delete pod --selector=app=rancher-webhook
+kubectl scale deployment --replicas=1 -n cattle-system rancher-webhook
+
+#  Wait for a new pod to start running before we attempt to copy the binary
+
+echo "Starting the updated Webhook Server"
+NEW_POD=$(get_running_webhook)
+while [ -z "${NEW_POD}" ]; do
+    sleep 2
+    NEW_POD=$(get_running_webhook)
+done
+
+# copy the newly compiled webhook binary into the webhook pod. We can not use `kubectl cp` because the image used for the webhook (bci-micro) does not contain the tar binary.
+cat ./webhook | kubectl exec -n cattle-system --stdin=true pod/${NEW_POD} -- /bin/bash -c "cat > /home/webhook/webhook"
+
+while ! kubectl rollout status -w -n cattle-system deploy/rancher-webhook; do
+    sleep 2
+done
+
+./webhook-integration.test -test.v
