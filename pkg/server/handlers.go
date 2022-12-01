@@ -14,6 +14,7 @@ import (
 	"github.com/rancher/webhook/pkg/resources/validation/globalrolebinding"
 	"github.com/rancher/webhook/pkg/resources/validation/machineconfig"
 	nshandler "github.com/rancher/webhook/pkg/resources/validation/namespace"
+	projhandler "github.com/rancher/webhook/pkg/resources/validation/project"
 	"github.com/rancher/webhook/pkg/resources/validation/projectroletemplatebinding"
 	"github.com/rancher/webhook/pkg/resources/validation/roletemplate"
 )
@@ -35,8 +36,9 @@ func Validation(clients *clients.Clients) ([]admission.ValidatingAdmissionHandle
 		crtbs := clusterroletemplatebinding.NewValidator(clients.Management.ClusterRoleTemplateBinding().Cache(),
 			clients.DefaultResolver, clients.RoleTemplateResolver)
 		roleTemplates := roletemplate.NewValidator(clients.DefaultResolver, clients.RoleTemplateResolver, clients.K8s.AuthorizationV1().SubjectAccessReviews())
+		projects := projhandler.NewValidator(clients)
 
-		handlers = append(handlers, globalRoles, globalRoleBindings, prtbs, crtbs, roleTemplates)
+		handlers = append(handlers, globalRoles, globalRoleBindings, prtbs, crtbs, roleTemplates, projects)
 	}
 	return handlers, nil
 }
